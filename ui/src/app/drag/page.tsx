@@ -1,6 +1,6 @@
 'use client';
 import { DragEvent, MouseEvent, useState } from 'react';
-import tailwindLayouts from './lib/tailwildlist';
+import tailwindLayouts from '../lib/tailwildlist';
 
 interface TailwildType {
     component: string;
@@ -9,12 +9,15 @@ interface TailwildType {
     onDrag: boolean;
 }
 
+interface UiList {
+    name: string;
+    onDrag: boolean;
+}
+
 export default function Home() {
     const regexTailwildList = /([a-zA-Z]+)(\d+)/;
     const [componentSelected, setComponentSelected] = useState<string>('');
-    const [uiList, setUiList] = useState<{ name: string; onDrag: boolean }[]>(
-        []
-    );
+    const [uiList, setUiList] = useState<UiList[]>([]);
     const tailwildListFilter = tailwindLayouts.reduce(
         (acc: TailwildType[], cur) => {
             const match = cur.match(regexTailwildList);
@@ -61,23 +64,18 @@ export default function Home() {
         ]);
     };
 
-    const handleDragStart = (e: DragEvent<HTMLDivElement>) => {
-        // e.preventDefault();
-        const elementDragging = e.currentTarget.dataset.index;
-
-        if (!elementDragging) return;
+    const handleStartDrag = (e: DragEvent<HTMLDivElement>, index: number) => {
+        e.dataTransfer.setData('text/plain', index.toString());
         setUiList((prev) =>
-            prev.map((el, index) => {
-                if (index === parseInt(elementDragging)) {
-                    return { ...el, onDrag: true };
-                }
-                return el;
+            prev.map((el, i) => {
+                if (index !== i) return el;
+                return { ...el, onDrag: true };
             })
         );
     };
 
     const handleDragEnd = (e: DragEvent<HTMLDivElement>) => {
-        // e.preventDefault();
+        console.log('End');
         setUiList((prev) => prev.map((el) => ({ ...el, onDrag: false })));
     };
 
@@ -89,46 +87,39 @@ export default function Home() {
 
         if (!draggingElement) return;
         const childNote = e.currentTarget.querySelectorAll(':not(.dragging)');
-        let indexOfAfterElement: number | string | null = null;
+        let afterElement: Element | null = null;
         let closest = Number.NEGATIVE_INFINITY;
         childNote.forEach((el) => {
             const div = el.getBoundingClientRect();
             const offset = e.clientY - div.top - div.height / 2;
             if (offset < 0 && offset > closest) {
                 closest = offset;
-                indexOfAfterElement = el.getAttribute('data-index');
+                afterElement = el;
             }
-            console.log({ offset, indexOfAfterElement, el });
         });
-        if (!indexOfAfterElement && indexOfDraggingElement) {
-            const newUiList = [...uiList];
-            const movedElement = newUiList.splice(
-                parseInt(indexOfDraggingElement),
-                1
-            );
-            newUiList.push(movedElement[0]);
-            // return setUiList(newUiList);
+
+        if (!afterElement && indexOfDraggingElement) {
+            e.currentTarget.appendChild(draggingElement);
         }
 
-        if (indexOfAfterElement && indexOfDraggingElement) {
-            const newUiList = [...uiList];
-            const movedElement = newUiList.splice(
-                parseInt(indexOfDraggingElement),
-                1
-            );
-            //First List
-            if (parseInt(indexOfAfterElement) - 1 < 0) {
-                newUiList.splice(0, 0, movedElement[0]);
-            } else {
-                newUiList.splice(
-                    parseInt(indexOfAfterElement) - 1,
-                    0,
-                    movedElement[0]
-                );
-            }
-
-            // return setUiList(newUiList);
+        if (afterElement && draggingElement) {
+            e.currentTarget.insertBefore(draggingElement, afterElement);
         }
+    };
+
+    const handleDrop = (e: DragEvent<HTMLDivElement>, newIndex: number) => {
+        e.preventDefault();
+        const oldIndex = parseInt(e.dataTransfer.getData('text/plain'));
+        const newUiList = [...uiList];
+        const [draggedItem] = newUiList.splice(oldIndex, 1);
+        newUiList.splice(newIndex, 0, draggedItem);
+        setUiList(newUiList);
+    };
+
+    const handleRemove = (index: number) => {
+        const newUiList = [...uiList];
+        newUiList.splice(index, 1);
+        setUiList(newUiList);
     };
 
     return (
@@ -182,8 +173,9 @@ export default function Home() {
                     {uiList.map((el, index) => (
                         <div
                             data-index={index}
-                            onDragStart={handleDragStart}
+                            onDragStart={(el) => handleStartDrag(el, index)}
                             onDragEnd={handleDragEnd}
+                            onDrop={(e) => handleDrop(e, index)}
                             draggable
                             className={`p-2 w-40 bg-white border cursor-move ${
                                 el.onDrag && 'opacity-30 dragging'
